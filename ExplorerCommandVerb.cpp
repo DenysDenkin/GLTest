@@ -13,6 +13,8 @@ struct FileInfo {
 	PWSTR Name;
 	UINT64 Size;
 	DWORD Bytesum;
+	bool isCounted = false;
+	bool isOut = false;
 	SYSTEMTIME DateCr;
 	PWSTR Path;
 };
@@ -97,7 +99,9 @@ public:
 
     IFACEMETHODIMP Invoke(IShellItemArray *psiItemArray, IBindCtx *pbc);
 
-	void Analyze(FileInfo &fileinfo);
+	void Analyze(std::vector<FileInfo> &fileinfo, std::ofstream &oh, int ind);
+
+	void writeInfoASAP(std::vector<FileInfo> &fileinfo, std::ofstream &oh, int ind);
 
     IFACEMETHODIMP GetFlags(EXPCMDFLAGS *pFlags)
     {
@@ -193,17 +197,19 @@ DWORD CExplorerCommandVerb::_ThreadProc()
 					break;
 
 			}
+
+			std::sort(fileinfo.begin(), fileinfo.end(), [](const FileInfo& a, const FileInfo& b)->bool {
+				return std::wstring(a.Name) < std::wstring(b.Name);
+			});
+
 			Threadpool fts;
 			for (int i = 0; i < count; i++) {
-				fts.AddTask(std::bind(&CExplorerCommandVerb::Analyze, this, std::ref(fileinfo[i])));
+				fts.AddTask(std::bind(&CExplorerCommandVerb::Analyze, this, std::ref(fileinfo), std::ref(oh), i));
 			}
 			fts.WaitForAll();
 
             if (SUCCEEDED(hr))
             {
-				std::sort(fileinfo.begin(), fileinfo.end(), [](const FileInfo& a, const FileInfo& b)->bool {
-					return std::wstring(a.Name) < std::wstring(b.Name);
-				});
 				std::wstring DisplayString; 
 				for (int i = 0; i < count; i++) {
 					oh << fileinfo[i].Name << "  ";
@@ -232,21 +238,36 @@ DWORD CExplorerCommandVerb::_ThreadProc()
     return 0;
 }
 
-void CExplorerCommandVerb::Analyze(FileInfo &fileinfo) {
+void CExplorerCommandVerb::Analyze(std::vector<FileInfo> &fileinfo, std::ofstream &oh, int ind) {
 	unsigned char curbyte;
-		std::ifstream curfile(fileinfo.Path, std::ios::binary | std::ios::ate);
-		if (curfile.is_open())
-			hi << fileinfo.Path << "\n";
-		hi.flush();
+		std::ifstream curfile(fileinfo[ind].Path, std::ios::binary | std::ios::ate);
 		std::ifstream::pos_type pos = curfile.tellg();
 		curfile.seekg(0, std::ios::beg);
 		for (int j = 0; j < pos; j++) {
 			curfile.read((char*)&curbyte, sizeof(char));
-			fileinfo.Bytesum += curbyte;
+			fileinfo[ind].Bytesum += curbyte;
 		}
+		fileinfo[ind].isCounted = true;
 		curfile.close();
+		writeInfoASAP(fileinfo, oh, ind);
 }
 
+
+void writeInfoASAP(std::vector<FileInfo> &fileinfo, std::ofstream &oh, int ind){
+
+	if (ind == 0 || (fileinfo[ind - 1].isOut && fileinfo[ind].isCounted)){
+		fileinfo[ind].isOut == true;
+		oh << "\n";
+		oh << fileinfo[ind].Name << "  ";
+		oh << fileinfo[ind].Size << " bytes ";
+		oh << fileinfo[ind].DateCr.wYear + "-";
+		oh << fileinfo[ind].DateCr.wMonth + "-";
+		oh << fileinfo[ind].DateCr.wDay + " ";
+		oh << fileinfo[ind].Bytesum + "\n";
+		if (ind != fileinfo.size - 1)
+			writeInfoASAP(fileinfo, oh, ind + 1);
+	}
+}
 
 IFACEMETHODIMP CExplorerCommandVerb::Invoke(IShellItemArray *psia, IBindCtx *)
 {

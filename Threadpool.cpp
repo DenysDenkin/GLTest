@@ -4,9 +4,9 @@
 #include <functional>
 #include <fstream>
 
-Threadpool::Threadpool():mythreads(6)
+Threadpool::Threadpool():threadcount(6),mythreads(threadcount)
 {
-	for (int i = 0; i < 1; i++)
+	for (int i = 0; i < threadcount; i++)
 		mythreads[i]=std::thread(std::bind(&Threadpool::Run, this));
 	isToStop = false;
 	taskinprog = 0;

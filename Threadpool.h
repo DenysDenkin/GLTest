@@ -19,6 +19,7 @@ public:
 	std::vector<std::thread> mythreads;
 	std::condition_variable condvar,cv;
 	std::atomic_bool isToStop;
+	int threadcount;
 	std::queue<std::function<void()>> myqueue;
 	std::atomic_int taskinprog;
 	void AddTask(std::function<void()>);
